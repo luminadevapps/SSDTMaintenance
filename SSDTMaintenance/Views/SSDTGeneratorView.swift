@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct SSDTGeneratorView: View {
 
@@ -40,9 +42,24 @@ struct SSDTGeneratorView: View {
     @State private var sataPreset: SATAPreset = .intelAHCI
     @State private var nvmePreset: NVMePreset = .generic
 
+    // MARK: - Maintenance (macOS Support) toggles
+    // Universal / safe → ON by default.
+    @State private var mAWAC = true      // clock fix (needs STAS in DSDT)
+    @State private var mPMC  = true      // native NVRAM
+    @State private var mUSBX = true      // USB power properties
+    @State private var mEC   = true      // fake EC (may need EC->EC0 rename)
+    @State private var mSBUS = true      // SMBus + MCHC
+    // Situational / board-specific → OFF by default.
+    @State private var mPNLF = false     // backlight (iGPU display)
+    @State private var mGPRW = false     // instant-wake fix (needs _GPRW->XGPW rename)
+    @State private var mRHUB = false     // USB root-hub reset
+    @State private var mALS0 = false     // fake ambient light sensor
+    @State private var mBRG0 = false     // PCI bridge _ADR template (advanced)
+
     // MARK: - Output / Log
     @State private var compileLog: String = ""
     @State private var showLog: Bool = false
+    @State private var showFolderPicker: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -126,6 +143,29 @@ struct SSDTGeneratorView: View {
                         )
                     }
 
+                    Section("Maintenance (macOS Support)") {
+                        maintenanceToggle("SSDT-AWAC", $mAWAC,
+                            "System clock fix (RTC/AWAC) — required on Z690/Z790")
+                        maintenanceToggle("SSDT-PMC", $mPMC,
+                            "Native NVRAM for 300-series and newer")
+                        maintenanceToggle("SSDT-USBX", $mUSBX,
+                            "USB sleep/wake power properties")
+                        maintenanceToggle("SSDT-EC", $mEC,
+                            "Fake Embedded Controller — may need EC→EC0 rename")
+                        maintenanceToggle("SSDT-SBUS-MCHC", $mSBUS,
+                            "SMBus + Memory Controller Hub")
+                        maintenanceToggle("SSDT-PNLF", $mPNLF,
+                            "Backlight control (iGPU display)")
+                        maintenanceToggle("SSDT-GPRW", $mGPRW,
+                            "Instant-wake fix — REQUIRES _GPRW→XGPW ACPI rename")
+                        maintenanceToggle("SSDT-RHUB", $mRHUB,
+                            "USB root-hub reset (port re-enumeration)")
+                        maintenanceToggle("SSDT-ALS0", $mALS0,
+                            "Fake ambient light sensor stub")
+                        maintenanceToggle("SSDT-BRG0", $mBRG0,
+                            "PCI bridge _ADR template (advanced — edit path first)")
+                    }
+
                     // Add bottom padding so form content doesn't sit under the button bar
                     Section {
                         EmptyView()
@@ -142,6 +182,7 @@ struct SSDTGeneratorView: View {
                 ScrollView {
                     Text(compileLog.isEmpty ? "No log yet." : compileLog)
                         .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
                 }
@@ -157,9 +198,17 @@ struct SSDTGeneratorView: View {
                     generateAll()
                 } label: {
                     Label("Generate ALL SSDTs", systemImage: "bolt.fill")
-                        .frame(minWidth: 220)
+                        .frame(minWidth: 200)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button {
+                    showFolderPicker = true
+                } label: {
+                    Label("Output Folder", systemImage: "folder.fill")
+                }
+                .buttonStyle(.bordered)
                 .controlSize(.large)
 
                 Button(showLog ? "Hide Log" : "Show Log") {
@@ -167,14 +216,22 @@ struct SSDTGeneratorView: View {
                 }
                 .buttonStyle(.bordered)
 
+                Button("Copy Log") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(compileLog, forType: .string)
+                }
+                .buttonStyle(.bordered)
+                .disabled(compileLog.isEmpty)
+
                 Spacer()
 
-                // Optional: show current folder short status
+                // Current folder status
                 if let folder = outputFolder {
                     Text(folder.lastPathComponent)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 } else {
                     Text("No folder selected")
                         .font(.caption)
@@ -184,6 +241,30 @@ struct SSDTGeneratorView: View {
             .padding()
             .background(Color(NSColor.windowBackgroundColor))
         }
+        .fileImporter(
+            isPresented: $showFolderPicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                _ = url.startAccessingSecurityScopedResource()
+                do {
+                    if !FileManager.default.fileExists(atPath: url.path) {
+                        try FileManager.default.createDirectory(
+                            at: url, withIntermediateDirectories: true
+                        )
+                    }
+                    outputFolder = url
+                    statusMessage = "Output: \(url.path)"
+                } catch {
+                    statusMessage = "❌ Cannot use folder"
+                }
+            case .failure(let error):
+                statusMessage = error.localizedDescription
+            }
+        }
     }
 
     // MARK: - UI Helpers
@@ -191,6 +272,20 @@ struct SSDTGeneratorView: View {
     private func pathField(_ title: String, _ binding: Binding<String>) -> some View {
         TextField(title, text: binding)
             .font(.system(.body, design: .monospaced))
+    }
+
+    private func maintenanceToggle(
+        _ title: String,
+        _ binding: Binding<Bool>,
+        _ subtitle: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Toggle(title, isOn: binding)
+                .font(.system(.body, design: .monospaced))
+            Text(subtitle)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
     }
 
     private func modelPicker<T>(
@@ -279,10 +374,34 @@ struct SSDTGeneratorView: View {
             ("SSDT-NVME", SSDTBuilder.nvmeWithPreset(path: nvmePath, preset: nvmePreset))
         ]
 
+        // Maintenance (macOS Support) SSDTs — only the enabled toggles.
+        // Derive helper paths from the LPC bridge / XHCI already entered above.
+        let lpcPath = "_SB.PC00.LPCB"
+        var maintenanceList: [(name: String, dsl: String)] = []
+        if mAWAC { maintenanceList.append(("SSDT-AWAC", SSDTBuilder.awac())) }
+        if mPMC  { maintenanceList.append(("SSDT-PMC",  SSDTBuilder.pmc(lpcPath: lpcPath))) }
+        if mUSBX { maintenanceList.append(("SSDT-USBX", SSDTBuilder.usbx())) }
+        if mEC   { maintenanceList.append(("SSDT-EC",   SSDTBuilder.fakeEC(lpcPath: lpcPath))) }
+        if mSBUS { maintenanceList.append(("SSDT-SBUS-MCHC", SSDTBuilder.sbusMCHC())) }
+        if mPNLF { maintenanceList.append(("SSDT-PNLF", SSDTBuilder.pnlf(gfxPath: igpuPath))) }
+        if mGPRW { maintenanceList.append(("SSDT-GPRW", SSDTBuilder.gprw())) }
+        if mRHUB { maintenanceList.append(("SSDT-RHUB", SSDTBuilder.rhub(xhciPath: xhciPath))) }
+        if mALS0 { maintenanceList.append(("SSDT-ALS0", SSDTBuilder.als0())) }
+        if mBRG0 { maintenanceList.append(("SSDT-BRG0", SSDTBuilder.brg0(parentPort: tbPath))) }
+
+        // The maintenance SSDT-EC / SSDT-USBX are the properly-scoped
+        // replacements for the legacy combined SSDT-EC-USBX. Drop the legacy
+        // one when either replacement is active to avoid duplicate EC/USBX.
+        let baseFiltered = (mEC || mUSBX)
+            ? ssdtList.filter { $0.name != "SSDT-EC-USBX" }
+            : ssdtList
+
+        let allSSDTs = baseFiltered + maintenanceList
+
         var wroteAny = false
 
         do {
-            for item in ssdtList {
+            for item in allSSDTs {
                 let trimmed = item.dsl.trimmingCharacters(in: .whitespacesAndNewlines)
                 if trimmed.isEmpty {
                     compileLog += "▶ \(item.name)\n(SKIPPED – empty SSDT)\n\n"

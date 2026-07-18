@@ -2,48 +2,66 @@
 //  DeveloperInfoView.swift
 //  SSDTMaintenance
 //
-//  Developer Information & Donation
+//  About — Lumina Dev Apps
 //
 
 import SwiftUI
+import AppKit
 
 struct DeveloperInfoView: View {
 
-    // MARK: - Links
+    // MARK: - Company Details
+    private let companyName   = "Lumina Dev Apps"
+    private let parentCompany = "A division of Direct Parcel Distributors Inc."
+    private let address       = "1335 Apollo St, Oshawa, Ontario L1K 3E6"
+    private let websiteText   = "luminadevapps.com"
+    private let websiteURL    = URL(string: "https://luminadevapps.com")!
+    private let email         = "support@luminadevapps.com"
+    private let copyright     = "© 2026 Lumina Dev Apps"
 
-    private let email = "nmano0006@gmail.com"
-    private let githubURL = URL(string: "https://github.com/nmano0006")!
     private let donateURL = URL(
         string: "https://www.paypal.com/donate/?business=H3PV9HX92AVMJ&no_recurring=0&item_name=Support+development+of+all+my+apps+and+tools.+Donations+fund+testing+hardware%2C+servers%2C+and+continued+open-source+development.&currency_code=CAD"
     )!
 
     var body: some View {
         ZStack {
-            // Modern window background
             Color(NSColor.windowBackgroundColor)
                 .ignoresSafeArea()
 
-            VStack(spacing: 28) {
+            VStack(spacing: 22) {
 
-                // MARK: - Title
+                // MARK: - Logo
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 96, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .shadow(radius: 4, y: 2)
+
+                // MARK: - Title / Company
                 VStack(spacing: 6) {
                     Text("SSDT Maintenance Utility")
                         .font(.largeTitle.bold())
 
-                    Text("Developer Information")
+                    Text(companyName)
+                        .font(.title3.weight(.semibold))
+
+                    Text(parentCompany)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
+                .multilineTextAlignment(.center)
 
                 Divider()
 
-                // MARK: - Developer Details
+                // MARK: - Company Details
                 VStack(alignment: .leading, spacing: 14) {
 
                     infoRow(
-                        icon: "person.fill",
-                        title: "Developer",
-                        value: "Navaratnam Manoranjan"
+                        icon: "globe",
+                        title: "Website",
+                        value: websiteText,
+                        action: { NSWorkspace.shared.open(websiteURL) }
                     )
 
                     infoRow(
@@ -51,19 +69,14 @@ struct DeveloperInfoView: View {
                         title: "Email",
                         value: email,
                         action: {
-                            NSWorkspace.shared.open(
-                                URL(string: "mailto:\(email)")!
-                            )
+                            NSWorkspace.shared.open(URL(string: "mailto:\(email)")!)
                         }
                     )
 
                     infoRow(
-                        icon: "chevron.left.slash.chevron.right",
-                        title: "GitHub",
-                        value: "github.com/nmano0006",
-                        action: {
-                            NSWorkspace.shared.open(githubURL)
-                        }
+                        icon: "mappin.and.ellipse",
+                        title: "Address",
+                        value: address
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -72,16 +85,15 @@ struct DeveloperInfoView: View {
 
                 // MARK: - Description
                 Text("""
-This open-source utility helps generate clean, OpenCore-ready SSDTs \
-for modern Hackintosh systems.
+This utility generates clean, OpenCore-ready SSDTs — including the \
+essential macOS-support maintenance tables — for modern Hackintosh systems.
 
-If this project saves you time or helps your build, \
-consider supporting continued development.
+If this tool helps your build, consider supporting continued development.
 """)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
 
-                // MARK: - Donate Button (Dark Green)
+                // MARK: - Donate Button
                 Button {
                     NSWorkspace.shared.open(donateURL)
                 } label: {
@@ -89,8 +101,14 @@ consider supporting continued development.
                         .frame(minWidth: 200)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color(red: 0.0, green: 0.45, blue: 0.25)) // 🌲 dark green
+                .tint(Color(red: 0.0, green: 0.45, blue: 0.25))
                 .controlSize(.large)
+
+                // MARK: - Copyright
+                Text(copyright)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
 
                 Spacer()
             }
